@@ -6,9 +6,15 @@ function App() {
   const [fullData, setFullData] = useState([]);
   const [spreadsheetData, setSpreadsheetData] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [headers, setHeaders] = useState([]);
+  const [bomHeaders, setBomHeaders] = useState([]);
+  const [bom1Headers, setBom1Headers] = useState([]);
   const [selection, setSelection] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState("Bom");
+
+  const [bom1Data, setBom1Data] = useState([]);
+  const [bom1SpreadsheetData, setBom1SpreadsheetData] = useState([]);
+
   const scrollRef = useRef();
   const pageSize = 30;
 
@@ -35,6 +41,7 @@ function App() {
     return [headerRow, ...dataRows];
   };
 
+  // BOM: Fetch initial data
   useEffect(() => {
     async function fetchData() {
       const res = await fetch(
@@ -42,17 +49,22 @@ function App() {
       );
       const json = await res.json();
       setFullData(json);
-      setHeaders(Object.keys(json[0]));
+
+      const bomKeys = Object.keys(json[0]);
+      setBomHeaders(bomKeys);
 
       const initialPage = json.slice(0, pageSize);
-      const formatted = convertJsonToSpreadsheetData(initialPage);
+      const formatted = convertJsonToSpreadsheetData(initialPage, bomKeys);
       setSpreadsheetData(formatted);
     }
 
     fetchData();
   }, []);
 
+  // BOM: Apply search and pagination
   useEffect(() => {
+    if (activeTab !== "Bom") return;
+
     const filteredData = fullData.filter((item) =>
       Object.values(item).some((val) =>
         String(val).toLowerCase().includes(searchTerm.toLowerCase())
@@ -60,10 +72,49 @@ function App() {
     );
 
     const sliced = filteredData.slice(0, currentPage * pageSize);
-    const formatted = convertJsonToSpreadsheetData(sliced, headers);
+    const formatted = convertJsonToSpreadsheetData(sliced, bomHeaders);
     setSpreadsheetData(formatted);
-  }, [searchTerm, fullData, currentPage, headers]);
+  }, [searchTerm, fullData, currentPage, bomHeaders, activeTab]);
 
+  // BOM1: Fetch product data
+  useEffect(() => {
+    async function fetchBom1Data() {
+      try {
+        const res = await fetch("https://dummyjson.com/products");
+        const data = await res.json();
+        const items = data.products || [];
+
+        setBom1Data(items);
+        const headers = Object.keys(items[0]);
+        setBom1Headers(headers);
+
+        const formatted = convertJsonToSpreadsheetData(items, headers);
+        setBom1SpreadsheetData(formatted);
+      } catch (error) {
+        console.error("Error fetching Bom1 data:", error);
+      }
+    }
+
+    if (activeTab === "Bom1" && bom1Data.length === 0) {
+      fetchBom1Data();
+    }
+  }, [activeTab]);
+
+  // BOM1: Apply search
+  useEffect(() => {
+    if (activeTab !== "Bom1") return;
+
+    const filteredData = bom1Data.filter((item) =>
+      Object.values(item).some((val) =>
+        String(val).toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    );
+
+    const formatted = convertJsonToSpreadsheetData(filteredData, bom1Headers);
+    setBom1SpreadsheetData(formatted);
+  }, [searchTerm, bom1Data, bom1Headers, activeTab]);
+
+  // Scroll for BOM pagination
   const handleScroll = () => {
     if (!scrollRef.current) return;
 
@@ -77,45 +128,37 @@ function App() {
     }
   };
 
+  // Cell selection & download
   useEffect(() => {
-    console.log("RAW selection: ", selection);
-
-    if (!selection || !selection.range || !selection.range.start) {
-      console.log("No selection made or invalid selection object.");
-      return;
-    }
+    if (!selection || !selection.range || !selection.range.start) return;
 
     const { row, column } = selection.range.start;
+    if (row === 0) return;
 
-    if (row === 0) {
-      console.log("Header row selected — skipping download.");
-      return;
-    }
-
-    const cell = spreadsheetData[row]?.[column];
+    const cell =
+      activeTab === "Bom"
+        ? spreadsheetData[row]?.[column]
+        : bom1SpreadsheetData[row]?.[column];
 
     if (cell?.isDownload && cell.downloadUrl) {
-      console.log("Downloading:", cell.value);
       const link = document.createElement("a");
       link.href = cell.downloadUrl;
       link.setAttribute("download", "");
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } else {
-      console.log("Selected Cell (not downloadable):", cell?.value || "N/A");
     }
-  }, [selection, spreadsheetData]);
+  }, [selection, spreadsheetData, bom1SpreadsheetData, activeTab]);
 
   return (
     <>
       <div className="container">
         <div className="tabs">
-          <button>Bom</button>
-          <button>Bom1</button>
-          <button>Bom2</button>
+          <button onClick={() => setActiveTab("Bom")}>Bom</button>
+          <button onClick={() => setActiveTab("Bom1")}>Bom1</button>
+          <button onClick={() => setActiveTab("Bom2")}>Bom2</button>
         </div>
-        <p>SpreedSheet</p>
+        <p>Spreadsheet</p>
 
         <div>
           <input
@@ -125,7 +168,7 @@ function App() {
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
-              setCurrentPage(1); // Reset to page 1 on new search
+              setCurrentPage(1);
             }}
           />
         </div>
@@ -133,18 +176,31 @@ function App() {
 
       <div
         style={{ height: "90vh", overflowY: "auto" }}
-        onScroll={handleScroll}
+        onScroll={activeTab === "Bom" ? handleScroll : undefined}
         ref={scrollRef}
       >
-        {spreadsheetData.length > 0 ? (
+        {activeTab === "Bom" && spreadsheetData.length > 0 && (
           <Spreadsheet
             data={spreadsheetData}
             onChange={setSpreadsheetData}
             onSelect={setSelection}
           />
-        ) : (
-          <p>Loading...</p>
         )}
+
+        {activeTab === "Bom1" && bom1SpreadsheetData.length > 0 && (
+          <Spreadsheet
+            data={bom1SpreadsheetData}
+            onChange={setBom1SpreadsheetData}
+            onSelect={setSelection}
+          />
+        )}
+
+        {activeTab === "Bom2" && <p>Bom2 content goes here.</p>}
+
+        {(activeTab === "Bom" && spreadsheetData.length === 0) ||
+        (activeTab === "Bom1" && bom1SpreadsheetData.length === 0) ? (
+          <p>Loading...</p>
+        ) : null}
       </div>
     </>
   );
