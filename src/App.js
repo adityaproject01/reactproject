@@ -22,13 +22,21 @@ function App() {
     if (!json || json.length === 0) return [];
 
     const finalHeaders = headers || Object.keys(json[0]);
-    const headerRow = finalHeaders.map((key) => ({ value: key }));
+
+    const headerRow = finalHeaders.map((key) => ({
+      value: key,
+      className: "spreadsheet-header", // Apply custom class
+      readOnly: true, // ✅ disable editing header
+    }));
 
     const dataRows = json.map((item) =>
       finalHeaders.map((key) => {
+        
         if (key.toLowerCase().includes("id")) {
           return {
             value: item[key],
+            readOnly: true, // ✅ disable editing header
+
             downloadUrl:
               "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
             isDownload: true,
@@ -41,7 +49,6 @@ function App() {
     return [headerRow, ...dataRows];
   };
 
-  // BOM: Fetch initial data
   useEffect(() => {
     async function fetchData() {
       const res = await fetch(
@@ -61,7 +68,6 @@ function App() {
     fetchData();
   }, []);
 
-  // BOM: Apply search and pagination
   useEffect(() => {
     if (activeTab !== "Bom") return;
 
@@ -76,14 +82,12 @@ function App() {
     setSpreadsheetData(formatted);
   }, [searchTerm, fullData, currentPage, bomHeaders, activeTab]);
 
-  // BOM1: Fetch product data
   useEffect(() => {
     async function fetchBom1Data() {
       try {
         const res = await fetch("https://dummyjson.com/products");
         const data = await res.json();
         const items = data.products || [];
-
         setBom1Data(items);
         const headers = Object.keys(items[0]);
         setBom1Headers(headers);
@@ -98,9 +102,8 @@ function App() {
     if (activeTab === "Bom1" && bom1Data.length === 0) {
       fetchBom1Data();
     }
-  }, [activeTab]);
+  }, [activeTab, bom1Data.length]);
 
-  // BOM1: Apply search
   useEffect(() => {
     if (activeTab !== "Bom1") return;
 
@@ -114,7 +117,6 @@ function App() {
     setBom1SpreadsheetData(formatted);
   }, [searchTerm, bom1Data, bom1Headers, activeTab]);
 
-  // Scroll for BOM pagination
   const handleScroll = () => {
     if (!scrollRef.current) return;
 
@@ -128,7 +130,6 @@ function App() {
     }
   };
 
-  // Cell selection & download
   useEffect(() => {
     if (!selection || !selection.range || !selection.range.start) return;
 
@@ -141,17 +142,12 @@ function App() {
         : bom1SpreadsheetData[row]?.[column];
 
     if (cell?.isDownload && cell.downloadUrl) {
-      const link = document.createElement("a");
-      link.href = cell.downloadUrl;
-      link.setAttribute("download", "");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      window.open(cell.downloadUrl, "_blank");
     }
   }, [selection, spreadsheetData, bom1SpreadsheetData, activeTab]);
 
   return (
-    <>
+    <div className="mainContainer">
       <div className="container">
         <div className="tabs">
           <button onClick={() => setActiveTab("Bom")}>Bom</button>
@@ -202,7 +198,7 @@ function App() {
           <p>Loading...</p>
         ) : null}
       </div>
-    </>
+    </div>
   );
 }
 
